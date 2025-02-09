@@ -138,6 +138,10 @@
           "interval of publishing message(ms)"},
          {topic, $t, "topic", string,
           "topic subscribe, support %u, %c, %i, %s variables"},
+         {topic_count, $z, "topic_count", {integer, 100},
+          "number of topics to publish to, default: 100"},
+         {topic_prefix, undefined, "topic_prefix", string,
+          "prefix for topics to publish to, default: 'topic/'"},
          {payload_hdrs, undefined, "payload-hdrs", {string, ""},
           " If set, add optional payload headers."
           " cnt64: strictly increasing counter(64bit) per publisher"
@@ -844,12 +848,21 @@ publish(Client, Opts) ->
               end,
     %% prefix dynamic headers.
     NewPayload = maybe_prefix_payload(Payload, Opts),
-    case emqtt:publish(Client, topic_opt(Opts), NewPayload, Flags) of
+    % Topic = random_topic(Opts),
+    Topic = topic_opt(Opts),
+    case emqtt:publish(Client, Topic, NewPayload, Flags) of
         ok -> ok;
         {ok, _} -> ok;
         {error, Reason} -> {error, Reason}
     end.
 
+% -include_lib("stdlib/include/rand.hrl").
+
+% random_topic(Opts) ->
+%     TopicCount = proplists:get_value(topic_count, Opts, 1),
+%     TopicPrefix = proplists:get_value(topic_prefix, Opts, <<"topic/">>),
+%     TopicIndex = rand:uniform(TopicCount),
+%     <<TopicPrefix/binary, integer_to_binary(1)/binary>>.
 
 publish_topic(Client, Topic, #{ name := Topic
                               , qos := QoS
@@ -883,7 +896,6 @@ publish_topic(Client, Topic, #{ name := Topic
          logger:error("Publish Topic: ~p Err: ~p", [Topic, Reason]),
          {error, Reason}
    end.
-
 
 session_property_opts(Opts) ->
     case session_property_opts(Opts, #{}) of
@@ -1074,8 +1086,22 @@ topics_opt([{topic, Topic}|Topics], Acc) ->
 topics_opt([_Opt|Topics], Acc) ->
     topics_opt(Topics, Acc).
 
+% topic_opt(Opts) ->
+%     feed_var(bin(proplists:get_value(topic, Opts)), Opts).
 topic_opt(Opts) ->
-    feed_var(bin(proplists:get_value(topic, Opts)), Opts).
+    % Lấy prefix từ Opts, nếu không có thì mặc định là <<"topic/">>
+    TopicPrefix = iolist_to_binary(proplists:get_value(topic, Opts, <<"topic/">>)),
+
+    % Lấy topic_count từ Opts, nếu không có thì mặc định là 100
+    % TopicCount = proplists:get_value(topic_count, Opts, 10000),
+
+    % Sinh số ngẫu nhiên từ 1 đến TopicCount
+    % TopicIndex = integer_to_binary(rand:uniform(TopicCount)),
+    TopicIndex = integer_to_binary(rand:uniform(40000)),
+    % TopicIndex = integer_to_binary(1),
+
+    % Ghép prefix với số ngẫu nhiên
+    <<TopicPrefix/binary, TopicIndex/binary>>.
 
 feed_var(Topic, Opts) when is_binary(Topic) ->
     PropsT = [{Var, bin(proplists:get_value(Key, Opts))} || {Key, Var} <-
